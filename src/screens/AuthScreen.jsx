@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { signInWithEmailAndPassword } from "firebase/auth";
+import { signInWithEmailAndPassword, onAuthStateChanged } from "firebase/auth";
 import { auth } from "../../firebase";
 
 const styles = `
@@ -142,11 +142,8 @@ const styles = `
   .alert-error   { background: rgba(255,79,106,.08); border: 1px solid rgba(255,79,106,.25); color: var(--danger); }
   .alert-success { background: rgba(61,220,132,.08); border: 1px solid rgba(61,220,132,.25); color: var(--success); }
   .alert-icon { flex-shrink: 0; margin-top: 1px; display: flex; align-items: center; }
-
-  .footer { margin-top: 1.8rem; font-family: 'DM Mono', monospace; font-size: .72rem; color: var(--muted); text-align: center; letter-spacing: .02em; }
 `;
 
-/* ── Lucide inline SVG icons ── */
 const IconHexagon = () => (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <polygon points="12 2 22 8.5 22 15.5 12 22 2 15.5 2 8.5"/>
@@ -190,6 +187,7 @@ export default function Login() {
   const [loading,  setLoading]  = useState(false);
   const [error,    setError]    = useState("");
   const [success,  setSuccess]  = useState("");
+  const [checking, setChecking] = useState(true);
 
   useEffect(() => {
     const tag = document.createElement("style");
@@ -197,6 +195,17 @@ export default function Login() {
     document.head.appendChild(tag);
     return () => document.head.removeChild(tag);
   }, []);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (user) {
+        navigate("/dashboard", { replace: true });
+      } else {
+        setChecking(false);
+      }
+    });
+    return () => unsubscribe();
+  }, [navigate]);
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -219,6 +228,8 @@ export default function Login() {
       setError(map[err.code] || err.message);
     } finally { setLoading(false); }
   };
+
+  if (checking) return null;
 
   return (
     <div className="scene">
