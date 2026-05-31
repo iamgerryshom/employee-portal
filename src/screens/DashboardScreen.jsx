@@ -306,7 +306,6 @@ const styles = `
 
   .dr-body { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 6px; }
 
-  /* avatar strip */
   .dr-avatar-strip {
     display: flex; align-items: center; gap: 13px;
     padding: 13px 15px;
@@ -331,7 +330,6 @@ const styles = `
     border: 1px solid rgba(79,142,255,.2); width: fit-content;
   }
 
-  /* accordion */
   .acc {
     border: 1px solid var(--border); border-radius: 12px;
     overflow: hidden; background: var(--surface2);
@@ -365,7 +363,6 @@ const styles = `
   }
   @keyframes accExpand { from{opacity:0;transform:translateY(-8px)} to{opacity:1;transform:translateY(0)} }
 
-  /* shared form/info styles */
   .info-box { background: var(--bg); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
   .irow { display: flex; align-items: center; justify-content: space-between; padding: 9px 13px; border-bottom: 1px solid var(--border); }
   .irow:last-child { border-bottom: none; }
@@ -444,13 +441,24 @@ const dayBounds = (dateStr) => {
 const statusClass = (s = "") => s.includes("COMPLETED") ? "bd-done" : s.includes("FAILED") ? "bd-fail" : "bd-pend";
 const statusLabel = (s = "") => s.includes("COMPLETED") ? "DONE" : s.includes("FAILED") ? "FAILED" : "PENDING";
 
-// Compact number formatter: 1200 → "1.2K", 1000000 → "1M"
 const compact = (n) => {
   const num = Number(n);
   if (isNaN(num)) return String(n);
   if (num >= 1_000_000) return (num / 1_000_000).toFixed(1) + "M";
   if (num >= 1_000)     return (num / 1_000).toFixed(1) + "K";
   return Number.isInteger(num) ? num.toString() : num.toFixed(1);
+};
+
+// Returns true only if dateVal falls within today's date in Nairobi timezone
+const isToday = (dateVal) => {
+  if (!dateVal) return false;
+  try {
+    const d = dateVal?.toDate ? dateVal.toDate() : new Date(dateVal);
+    const stored = d.toLocaleDateString("en-CA", { timeZone: "Africa/Nairobi" });
+    return stored === todayNairobi();
+  } catch {
+    return false;
+  }
 };
 
 /* ── ACCORDION SECTION ── */
@@ -814,11 +822,21 @@ export default function Dashboard() {
 
   if (!user) return null;
 
+  // Only show today's commission if commissionTodayDate is actually today in Nairobi time;
+  // otherwise fall back to 0 so stale Firestore values don't mislead the employee.
+  const todayCommission = isToday(empData?.commissionTodayDate)
+    ? empData?.commissionToday ?? 0
+    : 0;
+
+  const todayLabel = new Date().toLocaleDateString("en-KE", {
+    weekday: "short", month: "short", day: "numeric", timeZone: "Africa/Nairobi",
+  });
+
   const stats = [
-    { lbl: "today",  val: empData?.commissionToday ?? 0,       u: "KES", cls: "c-green",  bar: "var(--green)",  sub: fmtDate(empData?.commissionTodayDate) },
-    { lbl: "total",  val: empData?.totalCommissionEarned ?? 0, u: "KES", cls: "c-accent", bar: "var(--accent)", sub: "all time" },
-    { lbl: "sales",  val: empData?.successfulSalesCount ?? 0,  u: "",    cls: "c-amber",  bar: "var(--amber)",  sub: "successful" },
-    { lbl: "failed", val: empData?.failedSalesCount ?? 0,      u: "",    cls: "c-danger", bar: "var(--danger)", sub: "transactions" },
+    { lbl: "today",  val: todayCommission,                         u: "KES", cls: "c-green",  bar: "var(--green)",  sub: todayLabel },
+    { lbl: "total",  val: empData?.totalCommissionEarned ?? 0,     u: "KES", cls: "c-accent", bar: "var(--accent)", sub: "all time" },
+    { lbl: "sales",  val: empData?.successfulSalesCount ?? 0,      u: "",    cls: "c-amber",  bar: "var(--amber)",  sub: "successful" },
+    { lbl: "failed", val: empData?.failedSalesCount ?? 0,          u: "",    cls: "c-danger", bar: "var(--danger)", sub: "transactions" },
   ];
 
   return (
@@ -939,7 +957,6 @@ export default function Dashboard() {
               <div className="tx-empty">no transactions on {fmtDate(selectedDate)}</div>
             ) : filteredTxs.map(tx => {
               const isCompleted = tx.status?.includes("COMPLETED");
-              const isFailed    = tx.status?.includes("FAILED");
               return (
                 <div className="tx-row" key={tx.id}>
                   <div className="tx-ico">{micon(tx.paymentMethod)}</div>
