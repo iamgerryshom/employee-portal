@@ -17,7 +17,7 @@ import {
   User, Edit3, Smartphone, ShieldCheck, CircleDollarSign,
   AlertCircle, Loader2, Landmark, CreditCard, Clock,
   CalendarDays, BarChart3, Activity, Banknote, Hexagon,
-  CheckCircle2, XCircle, Timer, ChevronRight, Wifi,
+  CheckCircle2, XCircle, Timer, ChevronRight, Wifi, Hourglass,
 } from "lucide-react";
 
 const REFERRAL_BASE = "https://xnxxlivepussyhub.vercel.app";
@@ -88,7 +88,6 @@ const styles = `
     opacity: .35;
     pointer-events: none; z-index: 0;
   }
-  /* top glow */
   .app::after {
     content: '';
     position: fixed; top: -30%; left: 30%;
@@ -224,6 +223,30 @@ const styles = `
   .btn-copy:hover { transform: translateY(-1px); background: rgba(77,159,255,.12); }
   .btn-copy.copied { background: var(--gdim); color: var(--green); border-color: var(--gbdr); }
 
+  /* ── PENDING WITHDRAWAL BANNER ── */
+  .pending-wd-banner {
+    display: flex; align-items: flex-start; gap: 12px;
+    background: var(--adim); border: 1px solid var(--abdr);
+    border-radius: 12px; padding: 12px 14px;
+    margin-top: 14px;
+    animation: rise .4s cubic-bezier(.16,1,.3,1) both;
+  }
+  .pending-wd-banner-icon {
+    width: 32px; height: 32px; border-radius: 8px; flex-shrink: 0;
+    background: rgba(255,181,71,.12); border: 1px solid var(--abdr);
+    display: grid; place-items: center; color: var(--amber);
+  }
+  .pending-wd-banner-body { flex: 1; min-width: 0; }
+  .pending-wd-banner-title {
+    font-size: .84rem; font-weight: 700; color: var(--amber);
+    margin-bottom: 3px;
+  }
+  .pending-wd-banner-detail {
+    font-family: 'JetBrains Mono', monospace; font-size: .62rem; color: var(--subtle);
+    line-height: 1.6;
+  }
+  .pending-wd-banner-detail em { font-style: normal; color: var(--amber); }
+
   /* ── WALLET + TX LINKED ── */
   .wallet-tx-block {
     display: flex; flex-direction: column;
@@ -277,6 +300,17 @@ const styles = `
   }
   .btn-withdraw:hover:not(:disabled) { opacity: .9; transform: translateY(-1px); }
   .btn-withdraw:disabled { opacity: .3; cursor: not-allowed; transform: none; box-shadow: none; }
+
+  /* pending state for withdraw button */
+  .btn-withdraw-pending {
+    display: flex; align-items: center; gap: 6px;
+    padding: 8px 16px; border-radius: 10px;
+    background: var(--adim); color: var(--amber);
+    border: 1px solid var(--abdr);
+    font-family: 'Cabinet Grotesk', sans-serif; font-size: .82rem; font-weight: 800;
+    cursor: not-allowed; white-space: nowrap;
+    opacity: .85;
+  }
 
   .wallet-metrics {
     display: grid; grid-template-columns: 1fr 1fr 1fr;
@@ -866,7 +900,6 @@ const styles = `
     50%       { opacity: .35; }
   }
 
-  /* value flash on realtime update */
   @keyframes flashGreen {
     0%   { color: var(--green); }
     100% { color: inherit; }
@@ -907,15 +940,17 @@ const dayBounds = (dateStr) => {
 };
 
 const statusInfo = (s = "") => {
-  if (s.includes("COMPLETED")) return { cls: "pill-green", icon: CheckCircle2, label: "DONE" };
-  if (s.includes("FAILED"))    return { cls: "pill-red",   icon: XCircle,      label: "FAILED" };
-  return                              { cls: "pill-amber",  icon: Timer,        label: "PENDING" };
+  if (s === "APPROVED" || s.includes("COMPLETED")) return { cls: "pill-green", icon: CheckCircle2, label: s === "APPROVED" ? "APPROVED" : "DONE" };
+  if (s === "FAILED"   || s.includes("FAILED"))    return { cls: "pill-red",   icon: XCircle,      label: "FAILED" };
+  if (s === "PENDING")                             return { cls: "pill-amber",  icon: Timer,        label: "PENDING" };
+  return                                                  { cls: "pill-muted",  icon: Timer,        label: s || "—" };
 };
 
 const typeInfo = (t = "") => {
-  if (t === "CREDIT") return { cls: "pill-green", label: "CREDIT" };
-  if (t === "DEBIT")  return { cls: "pill-red",   label: "DEBIT" };
-  return                     { cls: "pill-amber",  label: t || "—" };
+  if (t === "CREDIT")     return { cls: "pill-green",  label: "CREDIT" };
+  if (t === "DEBIT")      return { cls: "pill-red",    label: "DEBIT" };
+  if (t === "WITHDRAWAL") return { cls: "pill-amber",  label: "WITHDRAWAL" };
+  return                         { cls: "pill-muted",  label: t || "—" };
 };
 
 const compact = (n) => {
@@ -990,7 +1025,6 @@ function WithdrawModal({ availableBalance, phoneNumber, onClose, onSuccess }) {
   const pct        = availableBalance > 0 ? Math.min(100, (numAmount / availableBalance) * 100) : 0;
   const isOver     = numAmount > availableBalance;
 
-  // smart quick-pick presets based on balance
   const presets = (() => {
     const half    = Math.floor(availableBalance / 2);
     const quarter = Math.floor(availableBalance / 4);
@@ -1013,7 +1047,7 @@ function WithdrawModal({ availableBalance, phoneNumber, onClose, onSuccess }) {
     if (ve) { setError(ve); return; }
     setLoading(true);
     try {
-      const withdrawFunds = httpsCallable(functions, "withdrawFunds");
+      const withdrawFunds = httpsCallable(functions, "withdraw");
       await withdrawFunds({ amount: numAmount });
       setStep("success");
       onSuccess?.();
@@ -1038,8 +1072,10 @@ function WithdrawModal({ availableBalance, phoneNumber, onClose, onSuccess }) {
             </div>
             <div className="wd-result-title">Request Submitted</div>
             <div className="wd-result-amount">{kes(numAmount)}</div>
+            {/* ── UPDATED SUCCESS MESSAGE ── */}
             <div className="wd-result-msg">
-              Your withdrawal is being processed and will arrive on M-Pesa shortly.
+              Your withdrawal request has been sent for admin approval.
+              You will receive the funds on M-Pesa once the request is approved.
             </div>
             {phoneNumber && (
               <div className="wd-result-dest">
@@ -1076,7 +1112,6 @@ function WithdrawModal({ availableBalance, phoneNumber, onClose, onSuccess }) {
         {/* ── FORM ── */}
         {step === "form" && (
           <>
-            {/* HERO — balance display */}
             <div className="wd-hero">
               <div className="wd-hero-top">
                 <div className="wd-hero-label-row">
@@ -1109,10 +1144,7 @@ function WithdrawModal({ availableBalance, phoneNumber, onClose, onSuccess }) {
               </div>
             </div>
 
-            {/* BODY */}
             <div className="wd-body">
-
-              {/* Amount input */}
               <div className="wd-amount-section">
                 <div className="wd-amount-header">
                   <span className="wd-amount-lbl">Enter Amount</span>
@@ -1145,7 +1177,6 @@ function WithdrawModal({ availableBalance, phoneNumber, onClose, onSuccess }) {
                 }
               </div>
 
-              {/* Quick presets */}
               {presets.length > 0 && (
                 <div className="wd-presets">
                   {presets.map(v => (
@@ -1161,7 +1192,6 @@ function WithdrawModal({ availableBalance, phoneNumber, onClose, onSuccess }) {
                 </div>
               )}
 
-              {/* Balance bar — live visual */}
               {numAmount > 0 && (
                 <div className="wd-balance-bar-wrap">
                   <div className="wd-bar-labels">
@@ -1184,10 +1214,8 @@ function WithdrawModal({ availableBalance, phoneNumber, onClose, onSuccess }) {
                   </div>
                 </div>
               )}
-
             </div>
 
-            {/* FOOTER */}
             <div className="wd-foot">
               <button
                 className="btn-wd-submit"
@@ -1373,12 +1401,12 @@ function StatCard({ label, value, sub, colorClass, accentColor, icon: Icon, smal
 }
 
 /* ── WALLET + TX LINKED BLOCK ── */
-function WalletTxBlock({ wallet, txs, txLoad, selectedDate, onDateChange, onWithdraw }) {
+function WalletTxBlock({ wallet, txs, txLoad, selectedDate, onDateChange, onWithdraw, pendingWithdrawal }) {
   const balance = wallet?.availableBalance ?? 0;
   const earned  = wallet?.totalEarned      ?? 0;
   const failed  = wallet?.totalFailed      ?? 0;
   const pending = wallet?.totalPending     ?? 0;
-  const canWithdraw = balance >= MIN_WITHDRAWAL;
+  const canWithdraw = balance >= MIN_WITHDRAWAL && !pendingWithdrawal;
 
   const filteredTxs = (() => {
     const [start, end] = dayBounds(selectedDate);
@@ -1412,17 +1440,41 @@ function WalletTxBlock({ wallet, txs, txLoad, selectedDate, onDateChange, onWith
             <div className="wallet-icon-circle">
               <CircleDollarSign size={20} />
             </div>
-            <button
-              className="btn-withdraw"
-              onClick={onWithdraw}
-              disabled={!canWithdraw}
-              title={!canWithdraw ? `Minimum balance to withdraw is KES ${MIN_WITHDRAWAL}` : "Withdraw funds"}
-            >
-              <ArrowUpRight size={14} />
-              Withdraw
-            </button>
+            {/* ── WITHDRAW BUTTON: normal vs pending state ── */}
+            {pendingWithdrawal ? (
+              <div className="btn-withdraw-pending" title="A withdrawal is already awaiting admin approval">
+                <Hourglass size={14} />
+                Pending…
+              </div>
+            ) : (
+              <button
+                className="btn-withdraw"
+                onClick={onWithdraw}
+                disabled={!canWithdraw}
+                title={!canWithdraw ? `Minimum balance to withdraw is KES ${MIN_WITHDRAWAL}` : "Withdraw funds"}
+              >
+                <ArrowUpRight size={14} />
+                Withdraw
+              </button>
+            )}
           </div>
         </div>
+
+        {/* ── PENDING WITHDRAWAL BANNER ── */}
+        {pendingWithdrawal && (
+          <div className="pending-wd-banner">
+            <div className="pending-wd-banner-icon">
+              <Hourglass size={14} />
+            </div>
+            <div className="pending-wd-banner-body">
+              <div className="pending-wd-banner-title">Withdrawal Pending Approval</div>
+              <div className="pending-wd-banner-detail">
+                <em>{kes(pendingWithdrawal.amount)}</em> requested on {fmt(pendingWithdrawal.requestedAt)}
+                {" · "}awaiting admin approval. You can make another request once this is processed.
+              </div>
+            </div>
+          </div>
+        )}
 
         <div className="wallet-metrics">
           <div className="wm-item">
@@ -1470,41 +1522,88 @@ function WalletTxBlock({ wallet, txs, txLoad, selectedDate, onDateChange, onWith
             No transactions on {fmtDate(selectedDate)}
           </div>
         ) : filteredTxs.map(tx => {
-          const isCompleted = tx.status?.includes("COMPLETED");
+          const isWithdrawal = tx.type === "WITHDRAWAL";
+          const isCompleted  = tx.status?.includes("COMPLETED");
+          const isApproved   = tx.status === "APPROVED";
+          const isFailed     = tx.status === "FAILED" || tx.status?.includes("FAILED");
+          const isPending    = tx.status === "PENDING";
+
           const { cls: statusCls, icon: StatusIcon, label: statusLabel } = statusInfo(tx.status);
           const { cls: typeCls, label: typeLabel } = typeInfo(tx.type);
           const commRate = tx.commissionRate != null ? `${(tx.commissionRate * 100).toFixed(0)}% rate` : null;
+
+          // Withdrawal rows get a distinct icon color based on status
+          const wdIconColor = isApproved ? "var(--green)" : isFailed ? "var(--red)" : "var(--amber)";
+
           return (
             <div className="tx-row" key={tx.id}>
-              <div className="tx-icon-wrap">
-                <PayIcon method={tx.paymentMethod} size={15} />
+              <div className="tx-icon-wrap" style={isWithdrawal ? {
+                background: isApproved ? "var(--gdim)" : isFailed ? "var(--rdim)" : "var(--adim)",
+                borderColor: isApproved ? "var(--gbdr)" : isFailed ? "var(--rbdr)" : "var(--abdr)",
+                color: wdIconColor,
+              } : {}}>
+                {isWithdrawal
+                  ? <ArrowUpRight size={15} />
+                  : <PayIcon method={tx.paymentMethod} size={15} />
+                }
               </div>
+
               <div className="tx-body">
-                <div className="tx-method">{tx.paymentMethod ?? "—"}</div>
-                <div className="tx-time">{fmt(tx.timestamp)}</div>
+                <div className="tx-method" style={isWithdrawal ? { color: "var(--text)" } : {}}>
+                  {isWithdrawal ? "Withdrawal" : (tx.paymentMethod ?? "—")}
+                </div>
+                <div className="tx-time">{fmt(tx.timestamp ?? tx.processedAt)}</div>
                 <div className="tx-pills">
+                  {/* Type pill */}
                   {tx.type && (
                     <span className={`pill ${typeCls}`}>{typeLabel}</span>
                   )}
+                  {/* Status pill */}
                   <span className={`pill ${statusCls}`}>
                     <StatusIcon size={9} /> {statusLabel}
                   </span>
-                  {commRate && (
+                  {/* Commission rate pill — only for non-withdrawal rows */}
+                  {!isWithdrawal && commRate && (
                     <span className="pill pill-muted">{commRate}</span>
+                  )}
+                  {/* M-Pesa destination pill for withdrawals */}
+                  {isWithdrawal && tx.refCode && (
+                    <span className="pill pill-muted">
+                      <Smartphone size={9} /> {tx.refCode}
+                    </span>
                   )}
                 </div>
               </div>
+
               <div className="tx-right">
-                <div className="tx-comm-label">commission</div>
-                {isCompleted
-                  ? <div className="tx-comm-val earned">+KES {tx.commission ?? "—"}</div>
-                  : <div className="tx-comm-val nil">—</div>
-                }
+                {isWithdrawal ? (
+                  <>
+                    <div className="tx-comm-label">amount</div>
+                    <div className="tx-comm-val" style={{
+                      color: isApproved ? "var(--red)" : isFailed ? "var(--muted)" : "var(--amber)",
+                      textDecoration: isFailed ? "line-through" : "none",
+                    }}>
+                      {isApproved || isPending ? `-${kes(tx.amount)}` : kes(tx.amount)}
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="tx-comm-label">commission</div>
+                    {isCompleted
+                      ? <div className="tx-comm-val earned">+KES {tx.commission ?? "—"}</div>
+                      : <div className="tx-comm-val nil">—</div>
+                    }
+                  </>
+                )}
                 {tx.newWalletBalance != null && (
                   <div className="tx-bal-trail">
                     <span>{compact(tx.previousWalletBalance ?? 0)}</span>
                     <ChevronRight size={10} />
-                    <span style={{ color: isCompleted ? "var(--green)" : "var(--subtle)" }}>
+                    <span style={{
+                      color: isWithdrawal
+                        ? (isApproved ? "var(--red)" : isFailed ? "var(--muted)" : "var(--amber)")
+                        : (isCompleted ? "var(--green)" : "var(--subtle)"),
+                    }}>
                       {compact(tx.newWalletBalance)}
                     </span>
                   </div>
@@ -1522,17 +1621,19 @@ function WalletTxBlock({ wallet, txs, txLoad, selectedDate, onDateChange, onWith
 export default function Dashboard() {
   const navigate = useNavigate();
 
-  const [user,         setUser]         = useState(null);
-  const [emp,          setEmp]          = useState(null);
-  const [dashboard,    setDashboard]    = useState(null);
-  const [wallet,       setWallet]       = useState(null);
-  const [txs,          setTxs]          = useState([]);
-  const [loading,      setLoading]      = useState(true);
-  const [txLoad,       setTxLoad]       = useState(true);
-  const [showDrawer,   setShowDrawer]   = useState(false);
-  const [showWithdraw, setShowWithdraw] = useState(false);
-  const [selectedDate, setSelectedDate] = useState(todayNairobi());
-  const [copied,       setCopied]       = useState(false);
+  const [user,              setUser]              = useState(null);
+  const [emp,               setEmp]               = useState(null);
+  const [dashboard,         setDashboard]         = useState(null);
+  const [wallet,            setWallet]            = useState(null);
+  const [txs,               setTxs]               = useState([]);
+  const [loading,           setLoading]           = useState(true);
+  const [txLoad,            setTxLoad]            = useState(true);
+  const [showDrawer,        setShowDrawer]        = useState(false);
+  const [showWithdraw,      setShowWithdraw]      = useState(false);
+  const [selectedDate,      setSelectedDate]      = useState(todayNairobi());
+  const [copied,            setCopied]            = useState(false);
+  // ── NEW: pending withdrawal state ──
+  const [pendingWithdrawal, setPendingWithdrawal] = useState(null); // null = none, object = the pending doc
 
   // Inject styles
   useEffect(() => {
@@ -1542,18 +1643,17 @@ export default function Dashboard() {
     return () => document.head.removeChild(tag);
   }, []);
 
-  // Auth → then attach all real-time listeners
+  // Auth → attach real-time listeners for emp, dashboard, wallet
   useEffect(() => {
     let unsubEmp = () => {}, unsubDash = () => {}, unsubWallet = () => {};
 
     const unsubAuth = onAuthStateChanged(auth, (u) => {
-      // Tear down previous listeners when user changes
       unsubEmp(); unsubDash(); unsubWallet();
 
       if (!u) { setLoading(false); navigate("/auth"); return; }
       setUser(u);
 
-      let initialBatch = 3; // count down to clear loading once all 3 first snapshots arrive
+      let initialBatch = 3;
       const done = () => { if (--initialBatch === 0) setLoading(false); };
 
       unsubEmp = onSnapshot(
@@ -1581,16 +1681,12 @@ export default function Dashboard() {
   // Real-time transactions listener
   useEffect(() => {
     if (!user) return;
-
     setTxLoad(true);
-
     const q = query(
       collection(firestore, "wallet_transactions"),
       where("employeeId", "==", user.uid),
       orderBy("timestamp", "desc")
     );
-
-    // Try indexed query first; fall back to unfiltered if index missing
     const unsub = onSnapshot(
       q,
       (snap) => {
@@ -1598,7 +1694,6 @@ export default function Dashboard() {
         setTxLoad(false);
       },
       () => {
-        // Fallback: listen to whole collection and filter client-side
         const fallbackUnsub = onSnapshot(
           collection(firestore, "wallet_transactions"),
           (snap) => {
@@ -1612,6 +1707,36 @@ export default function Dashboard() {
           }
         );
         return fallbackUnsub;
+      }
+    );
+    return () => unsub();
+  }, [user]);
+
+  // ── NEW: Real-time listener for pending withdraw_requests ──
+  useEffect(() => {
+    if (!user) return;
+
+    const q = query(
+      collection(firestore, "withdraw_requests"),
+      where("employeeId", "==", user.uid),
+      where("status", "==", "PENDING")
+    );
+
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        if (!snap.empty) {
+          // Take the most recently created pending request
+          const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+          docs.sort((a, b) => (b.requestedAt?.toDate?.() ?? 0) - (a.requestedAt?.toDate?.() ?? 0));
+          setPendingWithdrawal(docs[0]);
+        } else {
+          setPendingWithdrawal(null);
+        }
+      },
+      () => {
+        // If the query fails (e.g. missing index), fall back to no pending state
+        setPendingWithdrawal(null);
       }
     );
 
@@ -1635,7 +1760,7 @@ export default function Dashboard() {
   };
 
   const handleWithdrawSuccess = () => {
-    // Wallet balance updates automatically via onSnapshot listener
+    // Wallet balance + pending request both update automatically via onSnapshot listeners
     setShowWithdraw(false);
   };
 
@@ -1657,7 +1782,8 @@ export default function Dashboard() {
   return (
     <div className="app">
 
-      {showWithdraw && (
+      {/* Only show withdraw modal if there is no pending withdrawal */}
+      {showWithdraw && !pendingWithdrawal && (
         <WithdrawModal
           availableBalance={wallet?.availableBalance ?? 0}
           phoneNumber={emp?.phoneNumber}
@@ -1732,7 +1858,7 @@ export default function Dashboard() {
           )}
         </div>
 
-        {/* WALLET + TRANSACTIONS — LINKED */}
+        {/* WALLET + TRANSACTIONS */}
         <div className="a2">
           <div className="sec-label"><Wallet size={11} /> Wallet & Activity</div>
           <WalletTxBlock
@@ -1742,6 +1868,7 @@ export default function Dashboard() {
             selectedDate={selectedDate}
             onDateChange={setSelectedDate}
             onWithdraw={() => setShowWithdraw(true)}
+            pendingWithdrawal={pendingWithdrawal}
           />
         </div>
 
