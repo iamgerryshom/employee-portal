@@ -75,8 +75,9 @@ const isToday = (dateVal) => {
 };
 const isThisWeek = (weekStr) => {
   if (!weekStr) return false;
-  const d = new Date();
-  const day = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  // Use the Nairobi calendar date (same as the backend), not the browser's local date.
+  const [y, m, dd] = todayNairobi().split("-").map(Number);
+  const day = new Date(Date.UTC(y, m - 1, dd));
   day.setUTCDate(day.getUTCDate() + 4 - (day.getUTCDay() || 7));
   const yearStart = new Date(Date.UTC(day.getUTCFullYear(), 0, 1));
   const week = Math.ceil((((day - yearStart) / 86400000) + 1) / 7);
@@ -845,12 +846,11 @@ function EmployeeView({ user, emp, setEmp, onLogout }) {
     const q = query(collection(firestore, "wallet_transactions"), where("employeeId", "==", user.uid), orderBy("timestamp", "desc"));
     const unsub = onSnapshot(q,
       snap => { setTxs(snap.docs.map(d => ({ id: d.id, ...d.data() }))); setTxLoad(false); },
-      () => {
-        const fb = onSnapshot(collection(firestore, "wallet_transactions"), snap => {
-          setTxs(snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(t => t.employeeId === user.uid).sort((a, b) => (b.timestamp?.toDate?.() ?? 0) - (a.timestamp?.toDate?.() ?? 0)));
-          setTxLoad(false);
-        });
-        return fb;
+      err => {
+        // Usually means the composite index (backend/firestore.indexes.json) isn't deployed.
+        console.error("Failed to load transactions:", err);
+        setTxs([]);
+        setTxLoad(false);
       }
     );
     return () => unsub();
