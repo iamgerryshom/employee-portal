@@ -5,7 +5,7 @@ import {
   EmailAuthProvider, reauthenticateWithCredential,
 } from "firebase/auth";
 import {
-  doc, onSnapshot, updateDoc, serverTimestamp,
+  doc, onSnapshot, updateDoc,
   collection, query, where, orderBy,
 } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
@@ -536,7 +536,7 @@ function WalletTxBlock({ wallet, txs, txLoad, selectedDate, onDateChange, onWith
 }
 
 /* ─── ADMIN: CONFIRM MODAL ─── */
-function ConfirmApproveModal({ request, empName, onConfirm, onCancel, loading }) {
+function ConfirmApproveModal({ request, empName, empPhone, onConfirm, onCancel, loading }) {
   return (
     <div className="modal-overlay" onClick={e => e.target === e.currentTarget && !loading && onCancel()}>
       <div className="confirm-modal">
@@ -551,7 +551,8 @@ function ConfirmApproveModal({ request, empName, onConfirm, onCancel, loading })
           {[
             ["Agent",      empName],
             ["Amount",     kes(request.amount)],
-            ["Phone",      request.refCode ?? "—"],
+            ["M-Pesa phone", empPhone || "— not set"],
+            ["Ref code",   request.refCode ?? "—"],
             ["Requested",  fmt(request.requestedAt)],
             ["Request ID", request.requestId ?? request.id],
           ].map(([k, v]) => (
@@ -840,7 +841,7 @@ function EmployeeCard({ emp, wallet, walletLoading, pendingWd, onApprove, onCanc
             </div>
             <div className="pending-wd-meta">
               Requested <em>{fmt(pendingWd.requestedAt)}</em>
-              {pendingWd.refCode && <> · to <em>{pendingWd.refCode}</em></>}
+              {emp.phoneNumber && <> · to <em>{emp.phoneNumber}</em></>}
               {" · "}Bal. at request: <em>{kes(pendingWd.availableBalance)}</em>
               {pendingWd.initiatedBy && <> · <em>created by admin</em></>}
             </div>
@@ -929,9 +930,8 @@ function AdminView({ user, adminEmp, onLogout }) {
     if (!confirmReq) return;
     setApproving(true);
     try {
-      await updateDoc(doc(firestore, "withdraw_requests", confirmReq.request.id), {
-        status: "APPROVED", processedAt: serverTimestamp(), updatedAt: serverTimestamp(),
-      });
+      // Server checks admin role, deducts the wallet and records the withdrawal atomically.
+      await callFn("approveWithdrawal", { requestId: confirmReq.request.id });
       showToast(`Withdrawal approved for ${confirmReq.empName}`, "ok");
       setConfirmReq(null);
     } catch (e) {
@@ -957,6 +957,7 @@ function AdminView({ user, adminEmp, onLogout }) {
       {confirmReq && (
         <ConfirmApproveModal
           request={confirmReq.request} empName={confirmReq.empName}
+          empPhone={employees.find(e => e.uid === confirmReq.request.employeeId)?.phoneNumber}
           onConfirm={handleApprove} onCancel={() => !approving && setConfirmReq(null)} loading={approving}
         />
       )}
