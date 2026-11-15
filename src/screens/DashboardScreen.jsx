@@ -659,29 +659,59 @@ function CreateEmployeeModal({ onClose, onDone }) {
   );
 }
 
-/* ─── ADMIN: COMMISSION RATE ─── */
-function RateModal({ emp, onClose, onDone }) {
-  const [pct, setPct] = useState(String(ratePct(emp)));
+/* ─── ADMIN: EDIT EMPLOYEE DETAILS ─── */
+// Only fields that are safe to change. Ref code, role, login and balances are shown read-only.
+function EditEmployeeModal({ emp, onClose, onDone }) {
+  const initial = { name: emp.name ?? "", phoneNumber: emp.phoneNumber ?? "", pct: String(ratePct(emp)) };
+  const [f, setF] = useState(initial);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const set = (k) => (e) => { setF(p => ({ ...p, [k]: e.target.value })); setError(""); };
+
   const submit = async () => {
-    const n = Number(pct);
-    if (pct === "" || isNaN(n) || n < 0 || n > 100) return setError("Enter a rate between 0 and 100.");
+    const name  = f.name.trim();
+    const phone = f.phoneNumber.replace(/[\s-]/g, "");
+    const n     = Number(f.pct);
+    if (!name)                                           return setError("Name can't be empty.");
+    if (phone && !/^\+?\d{9,15}$/.test(phone))           return setError("Phone must be 9–15 digits, e.g. 254712345678.");
+    if (f.pct === "" || isNaN(n) || n < 0 || n > 100)    return setError("Commission must be between 0 and 100%.");
+
+    // Send only what changed.
+    const changes = {};
+    if (name  !== (emp.name ?? ""))        changes.name = name;
+    if (phone !== (emp.phoneNumber ?? "")) changes.phoneNumber = phone;
+    if (n     !== ratePct(emp))            changes.commissionRatePercent = n;
+    if (!Object.keys(changes).length)      return onClose();
+
     setLoading(true);
     try {
-      await callFn("setCommissionRate", { employeeId: emp.uid, ratePercent: n });
-      onDone(`Commission for ${emp.name} set to ${n}%`);
-    } catch (e) { setError(e?.message ?? "Could not update rate."); setLoading(false); }
+      await callFn("updateEmployee", { employeeId: emp.uid, ...changes });
+      onDone(`Details updated for ${name}`);
+    } catch (e) { setError(e?.message ?? "Could not save changes."); setLoading(false); }
   };
+
   return (
-    <AdminModal icon={Percent} tone="purple" title="Adjust commission rate"
-      body={<>Applies to new sales for <b>{emp.name}</b>. Sales already received keep the rate they had.</>}
+    <AdminModal icon={Edit3} tone="purple" title="Edit employee"
+      body={<>Update details for <b>{emp.name}</b>.</>}
       error={error} onCancel={onClose} onConfirm={submit} loading={loading}
-      confirmLabel="Save rate" confirmIcon={Check} busyLabel="Saving…">
-      <div>
-        <label className="form-label">Commission rate (%) <span className="form-hint">currently {ratePct(emp)}%</span></label>
-        <div className="input-icon-wrap"><Percent size={14} />
-          <input className="form-input" value={pct} onChange={e => { setPct(e.target.value); setError(""); }} inputMode="decimal" autoFocus /></div>
+      confirmLabel="Save changes" confirmIcon={Check} busyLabel="Saving…">
+      <div className="form-stack">
+        <div><label className="form-label">Full name</label>
+          <input className="form-input" value={f.name} onChange={set("name")} maxLength={80} /></div>
+        <div><label className="form-label">M-Pesa phone <span className="form-hint">leave empty to clear</span></label>
+          <div className="input-icon-wrap"><Smartphone size={14} />
+            <input className="form-input" value={f.phoneNumber} onChange={set("phoneNumber")} placeholder="2547…" inputMode="tel" /></div></div>
+        <div><label className="form-label">Commission rate (%) <span className="form-hint">new sales only</span></label>
+          <div className="input-icon-wrap"><Percent size={14} />
+            <input className="form-input" value={f.pct} onChange={set("pct")} inputMode="decimal" /></div></div>
+      </div>
+      <div className="confirm-detail">
+        {[["Ref code", emp.refCode ?? "—"], ["Role", emp.role ?? "—"]].map(([k, v]) => (
+          <div className="confirm-detail-row" key={k}>
+            <span className="confirm-detail-k">{k}</span>
+            <span className="confirm-detail-v"><Lock size={11} style={{ verticalAlign: "-1px", marginRight: 5, color: "var(--muted)" }} />{v}</span>
+          </div>
+        ))}
       </div>
     </AdminModal>
   );
@@ -755,7 +785,7 @@ function CancelWithdrawalModal({ request, empName, onClose, onDone }) {
 }
 
 /* ─── ADMIN: EMPLOYEE CARD ─── */
-function EmployeeCard({ emp, wallet, walletLoading, pendingWd, onApprove, onCancelWd, onEditRate, onWithdraw }) {
+function EmployeeCard({ emp, wallet, walletLoading, pendingWd, onApprove, onCancelWd, onEdit, onWithdraw }) {
   const [grad] = useState(() => avatarGrad(emp.uid));
   const hasPending = !!pendingWd;
   const balance = Number(wallet?.availableBalance ?? 0);
@@ -826,8 +856,8 @@ function EmployeeCard({ emp, wallet, walletLoading, pendingWd, onApprove, onCanc
         </div>
       )}
       <div className="emp-actions">
-        <button className="emp-action-btn" onClick={() => onEditRate(emp)}>
-          <Percent size={14} />Commission rate
+        <button className="emp-action-btn" onClick={() => onEdit(emp)}>
+          <Edit3 size={14} />Edit details
         </button>
         <button className="emp-action-btn" onClick={() => onWithdraw(emp)} disabled={!!withdrawBlock || walletLoading} title={withdrawBlock || "Create a withdrawal for this agent"}>
           <ArrowUpRight size={14} />Withdraw for agent
@@ -850,7 +880,7 @@ function AdminView({ user, adminEmp, onLogout }) {
   const [confirmReq,     setConfirmReq]     = useState(null);
   const [approving,      setApproving]      = useState(false);
   const [toast,          setToast]          = useState(null);
-  const [modal,          setModal]          = useState(null); // { type: "create"|"rate"|"withdraw"|"cancel", ... }
+  const [modal,          setModal]          = useState(null); // { type: "create"|"edit"|"withdraw"|"cancel", ... }
 
   const closeModal = () => setModal(null);
   const modalDone  = (msg) => { setModal(null); showToast(msg, "ok"); };
@@ -931,7 +961,7 @@ function AdminView({ user, adminEmp, onLogout }) {
         />
       )}
       {modal?.type === "create"   && <CreateEmployeeModal onClose={closeModal} onDone={msg => showToast(msg, "ok")} />}
-      {modal?.type === "rate"     && <RateModal emp={modal.emp} onClose={closeModal} onDone={modalDone} />}
+      {modal?.type === "edit"     && <EditEmployeeModal emp={modal.emp} onClose={closeModal} onDone={modalDone} />}
       {modal?.type === "withdraw" && <AdminWithdrawModal emp={modal.emp} wallet={wallets[modal.emp.uid]} onClose={closeModal} onDone={modalDone} />}
       {modal?.type === "cancel"   && <CancelWithdrawalModal request={modal.request} empName={modal.empName} onClose={closeModal} onDone={modalDone} />}
       {toast && (
@@ -1024,7 +1054,7 @@ function AdminView({ user, adminEmp, onLogout }) {
                   pendingWd={pendingWds[emp.uid] ?? null}
                   onApprove={(req, name) => setConfirmReq({ request: req, empName: name })}
                   onCancelWd={(req, name) => setModal({ type: "cancel", request: req, empName: name })}
-                  onEditRate={e => setModal({ type: "rate", emp: e })}
+                  onEdit={e => setModal({ type: "edit", emp: e })}
                   onWithdraw={e => setModal({ type: "withdraw", emp: e })}
                 />
               ))}
