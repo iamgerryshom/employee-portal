@@ -509,7 +509,11 @@ const styles = `
   .dr-title { font-size: 1rem; font-weight: 600; color: var(--text); }
   .dr-close-btn { width: 32px; height: 32px; border-radius: 9px; background: var(--s1); border: 1px solid var(--border); color: var(--subtle); cursor: pointer; display: grid; place-items: center; transition: background .15s, color .15s; }
   .dr-close-btn:hover { background: var(--s3); color: var(--text); }
-  .dr-body { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 8px; }
+  .dr-body { flex: 1; min-height: 0; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 8px; }
+  /* Sections must keep their full height and let .dr-body scroll — otherwise
+     (because .acc-item has overflow:hidden) flexbox squeezes an open section
+     on short screens and clips its fields. */
+  .dr-body > *, .confirm-modal > * { flex-shrink: 0; }
   .dr-profile-strip { display: flex; align-items: center; gap: 14px; padding: 18px; background: var(--s1); border: 1px solid var(--border); border-radius: 14px; margin-bottom: 8px; box-shadow: var(--shadow-sm); }
   .dr-avatar { width: 52px; height: 52px; border-radius: 50%; flex-shrink: 0; background: linear-gradient(135deg, #6366f1, #8b5cf6); display: grid; place-items: center; font-size: 1rem; font-weight: 700; color: #fff; box-shadow: 0 0 0 4px var(--primary-50); }
   .dr-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
