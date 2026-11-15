@@ -879,6 +879,18 @@ const styles = `
     .btn-primary:active:not(:disabled), .filter-btn:active, .wd-preset:active { transform: scale(.97); }
     .tx-row:active, .acc-trigger:active { background: var(--s2); }
   }
+
+  /* ── Admin actions: mobile ── */
+  @media (max-width: 640px) {
+    .btn-new-emp { margin-left: 0; width: 100%; justify-content: center; min-height: 44px; }
+    .emp-actions { padding: 12px 16px; flex-wrap: wrap; }
+    .emp-action-btn { flex: 1; justify-content: center; min-height: 42px; }
+    .pending-wd-btns { width: 100%; }
+    /* Share the row equally; override the older .btn-approve { width: 100% } rule,
+       which made Approve overflow the card once Cancel was added beside it. */
+    .pending-wd-btns > button { flex: 1 1 0; width: auto; min-width: 0; min-height: 44px; }
+    .form-grid-2 { grid-template-columns: 1fr; }
+  }
 `;
 
 export default styles;
