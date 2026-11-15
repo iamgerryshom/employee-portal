@@ -674,6 +674,44 @@ const styles = `
   .splash-txt { font-size: .86rem; font-weight: 500; color: var(--subtle); }
 
   /* ── RESPONSIVE ── */
+
+  /* ── Admin actions (create employee, commission, withdraw/cancel) ── */
+  .btn-new-emp {
+    margin-left: auto; display: inline-flex; align-items: center; gap: 7px;
+    padding: 10px 16px; border: none; border-radius: 10px; cursor: pointer;
+    background: var(--primary); color: #fff; font-size: .85rem; font-weight: 600; white-space: nowrap;
+    box-shadow: 0 1px 2px rgba(79,70,229,.3); transition: background .15s, transform .12s;
+  }
+  .btn-new-emp:hover { background: var(--primary-600); }
+  .emp-actions { display: flex; gap: 8px; padding: 12px 20px; border-top: 1px solid var(--border); }
+  .emp-action-btn {
+    display: inline-flex; align-items: center; gap: 6px; padding: 8px 12px;
+    border: 1px solid var(--border2); border-radius: 9px; background: var(--s1);
+    color: var(--dim); font-size: .8rem; font-weight: 600; cursor: pointer; transition: background .15s, color .15s;
+  }
+  .emp-action-btn:hover:not(:disabled) { background: var(--s2); color: var(--text); }
+  .emp-action-btn:disabled { opacity: .45; cursor: not-allowed; }
+  .pending-wd-btns { display: flex; gap: 8px; flex-shrink: 0; }
+  .btn-reject {
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    padding: 9px 14px; border-radius: 10px; border: 1px solid var(--rbdr);
+    background: var(--rdim); color: var(--red); font-size: .85rem; font-weight: 600; cursor: pointer; white-space: nowrap;
+  }
+  .btn-reject:hover { background: #fee2e2; }
+  .btn-confirm-danger { background: var(--red); box-shadow: 0 1px 2px rgba(220,38,38,.3); }
+  .btn-confirm-danger:hover:not(:disabled) { background: #b91c1c; }
+  .confirm-icon-wrap.tone-purple { background: var(--pdim); color: var(--purple); }
+  .confirm-icon-wrap.tone-amber  { background: var(--adim); color: var(--amber); }
+  .confirm-icon-wrap.tone-red    { background: var(--rdim); color: var(--red); }
+  .confirm-modal .form-stack { gap: 10px; }
+  .confirm-modal { max-height: calc(100vh - 32px); overflow-y: auto; }
+  .form-hint { font-weight: 400; color: var(--muted); margin-left: 4px; }
+  .form-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .input-icon-wrap { position: relative; }
+  .input-icon-wrap > svg { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--muted); pointer-events: none; }
+  .input-icon-wrap .form-input { padding-left: 34px; }
+  .link-btn { margin-top: 6px; border: none; background: none; padding: 0; color: var(--primary); font-size: .8rem; font-weight: 600; cursor: pointer; }
+
   @media (max-width: 1000px) {
     .emp-grid { grid-template-columns: 1fr; }
     .overview-row { grid-template-columns: repeat(2, 1fr); }

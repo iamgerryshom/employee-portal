@@ -20,6 +20,7 @@ import {
   CalendarDays, BarChart3, Activity, Banknote, Hexagon,
   CheckCircle2, XCircle, Timer, ChevronRight, Wifi, Hourglass,
   Users, Search, AlertTriangle, Shield,
+  UserPlus, Percent, Ban, KeyRound, AtSign,
 } from "lucide-react";
 
 const REFERRAL_BASE = "https://xnxxlivepussyhub.vercel.app";
@@ -571,10 +572,195 @@ function ConfirmApproveModal({ request, empName, onConfirm, onCancel, loading })
   );
 }
 
+/* ─── ADMIN: GENERIC FORM MODAL ─── */
+const callFn = (name, data) => httpsCallable(functions, name)(data);
+const ratePct = (emp) => Math.round(Number(emp?.commisionRate ?? 0.25) * 10000) / 100;
+
+function AdminModal({ icon: Icon, tone = "green", title, body, children, error, onCancel, onConfirm, confirmLabel, confirmIcon: CIcon, loading, busyLabel, danger }) {
+  return (
+    <div className="modal-overlay" onClick={e => e.target === e.currentTarget && !loading && onCancel()}>
+      <div className="confirm-modal">
+        <div className={`confirm-icon-wrap tone-${tone}`}><Icon size={24} strokeWidth={1.8} /></div>
+        <div>
+          <div className="confirm-title">{title}</div>
+          {body && <div className="confirm-body" style={{ marginTop: 6 }}>{body}</div>}
+        </div>
+        {children}
+        {error && <div className="feedback feedback-err"><X size={12} />{error}</div>}
+        <div className="confirm-btns">
+          <button className="btn-cancel-sm" onClick={onCancel} disabled={loading}>{onConfirm ? "Cancel" : "Close"}</button>
+          {onConfirm && (
+            <button className={`btn-confirm${danger ? " btn-confirm-danger" : ""}`} onClick={onConfirm} disabled={loading}>
+              {loading ? <><Spin size={14} color="#fff" />{busyLabel}</> : <>{CIcon && <CIcon size={14} />}{confirmLabel}</>}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─── ADMIN: CREATE EMPLOYEE ─── */
+function CreateEmployeeModal({ onClose, onDone }) {
+  const [f, setF] = useState({ name: "", username: "", password: "", phoneNumber: "", commissionRatePercent: "25" });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [created, setCreated] = useState(null);
+  const set = (k) => (e) => { setF(p => ({ ...p, [k]: e.target.value })); setError(""); };
+
+  const submit = async () => {
+    if (!f.name.trim())                                      return setError("Enter the employee's name.");
+    if (!/^[a-zA-Z0-9._-]{3,30}$/.test(f.username.trim()))  return setError("Username: 3–30 letters, numbers, dot, dash or underscore.");
+    if (f.password.length < 6)                               return setError("Password must be at least 6 characters.");
+    const pct = Number(f.commissionRatePercent);
+    if (f.commissionRatePercent === "" || isNaN(pct) || pct < 0 || pct > 100) return setError("Commission must be between 0 and 100%.");
+    setLoading(true);
+    try {
+      const { data } = await callFn("createEmployee", { ...f, commissionRatePercent: pct });
+      setCreated({ ...data, password: f.password, name: f.name.trim() });
+      onDone?.(`Employee ${f.name.trim()} created`);
+    } catch (e) { setError(e?.message ?? "Could not create employee."); }
+    finally { setLoading(false); }
+  };
+
+  if (created) return (
+    <AdminModal icon={CheckCircle2} title="Employee created" onCancel={onClose}
+      body="Share these login details with the employee. They can change the password from their profile.">
+      <div className="confirm-detail">
+        {[["Name", created.name], ["Username", created.email.split("@")[0]], ["Password", created.password]].map(([k, v]) => (
+          <div className="confirm-detail-row" key={k}><span className="confirm-detail-k">{k}</span><span className="confirm-detail-v">{v}</span></div>
+        ))}
+      </div>
+    </AdminModal>
+  );
+
+  return (
+    <AdminModal icon={UserPlus} tone="purple" title="New employee"
+      body="Creates a login for the employee. Their referral code is generated automatically."
+      error={error} onCancel={onClose} onConfirm={submit} loading={loading}
+      confirmLabel="Create employee" confirmIcon={UserPlus} busyLabel="Creating…">
+      <div className="form-stack">
+        <div><label className="form-label">Full name</label>
+          <input className="form-input" value={f.name} onChange={set("name")} placeholder="Jane Wanjiku" autoFocus /></div>
+        <div><label className="form-label">Username <span className="form-hint">signs in as username@emp.com</span></label>
+          <div className="input-icon-wrap"><AtSign size={14} />
+            <input className="form-input" value={f.username} onChange={set("username")} placeholder="jane.w" autoCapitalize="none" autoComplete="off" /></div></div>
+        <div><label className="form-label">Password</label>
+          <div className="input-icon-wrap"><KeyRound size={14} />
+            <input className="form-input" value={f.password} onChange={set("password")} placeholder="min 6 characters" autoComplete="new-password" /></div></div>
+        <div className="form-grid-2">
+          <div><label className="form-label">M-Pesa phone <span className="form-hint">optional</span></label>
+            <input className="form-input" value={f.phoneNumber} onChange={set("phoneNumber")} placeholder="2547…" inputMode="tel" /></div>
+          <div><label className="form-label">Commission %</label>
+            <input className="form-input" value={f.commissionRatePercent} onChange={set("commissionRatePercent")} inputMode="decimal" /></div>
+        </div>
+      </div>
+    </AdminModal>
+  );
+}
+
+/* ─── ADMIN: COMMISSION RATE ─── */
+function RateModal({ emp, onClose, onDone }) {
+  const [pct, setPct] = useState(String(ratePct(emp)));
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const submit = async () => {
+    const n = Number(pct);
+    if (pct === "" || isNaN(n) || n < 0 || n > 100) return setError("Enter a rate between 0 and 100.");
+    setLoading(true);
+    try {
+      await callFn("setCommissionRate", { employeeId: emp.uid, ratePercent: n });
+      onDone(`Commission for ${emp.name} set to ${n}%`);
+    } catch (e) { setError(e?.message ?? "Could not update rate."); setLoading(false); }
+  };
+  return (
+    <AdminModal icon={Percent} tone="purple" title="Adjust commission rate"
+      body={<>Applies to new sales for <b>{emp.name}</b>. Sales already received keep the rate they had.</>}
+      error={error} onCancel={onClose} onConfirm={submit} loading={loading}
+      confirmLabel="Save rate" confirmIcon={Check} busyLabel="Saving…">
+      <div>
+        <label className="form-label">Commission rate (%) <span className="form-hint">currently {ratePct(emp)}%</span></label>
+        <div className="input-icon-wrap"><Percent size={14} />
+          <input className="form-input" value={pct} onChange={e => { setPct(e.target.value); setError(""); }} inputMode="decimal" autoFocus /></div>
+      </div>
+    </AdminModal>
+  );
+}
+
+/* ─── ADMIN: WITHDRAW ON BEHALF ─── */
+function AdminWithdrawModal({ emp, wallet, onClose, onDone }) {
+  const balance = Number(wallet?.availableBalance ?? 0);
+  const [amount, setAmount] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const submit = async () => {
+    const n = Number(amount);
+    if (!amount || isNaN(n))   return setError("Enter an amount.");
+    if (n < MIN_WITHDRAWAL)    return setError(`Minimum withdrawal is KES ${MIN_WITHDRAWAL}.`);
+    if (n > balance)           return setError("Amount exceeds the available balance.");
+    setLoading(true);
+    try {
+      await callFn("adminCreateWithdrawal", { employeeId: emp.uid, amount: n });
+      onDone(`Withdrawal of ${kes(n)} created for ${emp.name} — approve it to pay out`);
+    } catch (e) { setError(e?.message ?? "Could not create withdrawal."); setLoading(false); }
+  };
+  return (
+    <AdminModal icon={ArrowUpRight} tone="amber" title="Withdraw for agent"
+      body={<>Creates a pending withdrawal for <b>{emp.name}</b>. It appears on their card and still needs to be approved.</>}
+      error={error} onCancel={onClose} onConfirm={submit} loading={loading}
+      confirmLabel="Create request" confirmIcon={ArrowUpRight} busyLabel="Creating…">
+      <div className="confirm-detail">
+        <div className="confirm-detail-row"><span className="confirm-detail-k">Available balance</span><span className="confirm-detail-v">{kes(balance)}</span></div>
+        <div className="confirm-detail-row"><span className="confirm-detail-k">M-Pesa phone</span><span className="confirm-detail-v">{emp.phoneNumber || "— not set"}</span></div>
+      </div>
+      <div>
+        <label className="form-label">Amount (KES)</label>
+        <input className="form-input" value={amount} onChange={e => { setAmount(e.target.value); setError(""); }} inputMode="decimal" placeholder={`${MIN_WITHDRAWAL} – ${Math.floor(balance)}`} autoFocus />
+        {balance >= MIN_WITHDRAWAL && (
+          <button type="button" className="link-btn" onClick={() => setAmount(String(Math.floor(balance)))}>Use full balance</button>
+        )}
+      </div>
+    </AdminModal>
+  );
+}
+
+/* ─── ADMIN: CANCEL WITHDRAWAL ─── */
+function CancelWithdrawalModal({ request, empName, onClose, onDone }) {
+  const [reason, setReason] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const submit = async () => {
+    setLoading(true);
+    try {
+      await callFn("cancelWithdrawal", { requestId: request.id, reason });
+      onDone(`Withdrawal for ${empName} cancelled`);
+    } catch (e) { setError(e?.message ?? "Could not cancel withdrawal."); setLoading(false); }
+  };
+  return (
+    <AdminModal icon={Ban} tone="red" title="Cancel withdrawal?" danger
+      body="The request is closed and no money is moved. The agent can request again later."
+      error={error} onCancel={onClose} onConfirm={submit} loading={loading}
+      confirmLabel="Cancel withdrawal" confirmIcon={Ban} busyLabel="Cancelling…">
+      <div className="confirm-detail">
+        {[["Agent", empName], ["Amount", kes(request.amount)], ["Requested", fmt(request.requestedAt)]].map(([k, v]) => (
+          <div className="confirm-detail-row" key={k}><span className="confirm-detail-k">{k}</span><span className="confirm-detail-v">{v}</span></div>
+        ))}
+      </div>
+      <div>
+        <label className="form-label">Reason <span className="form-hint">optional</span></label>
+        <input className="form-input" value={reason} onChange={e => setReason(e.target.value)} placeholder="e.g. wrong amount" maxLength={300} />
+      </div>
+    </AdminModal>
+  );
+}
+
 /* ─── ADMIN: EMPLOYEE CARD ─── */
-function EmployeeCard({ emp, wallet, walletLoading, pendingWd, onApprove }) {
+function EmployeeCard({ emp, wallet, walletLoading, pendingWd, onApprove, onCancelWd, onEditRate, onWithdraw }) {
   const [grad] = useState(() => avatarGrad(emp.uid));
   const hasPending = !!pendingWd;
+  const balance = Number(wallet?.availableBalance ?? 0);
+  const withdrawBlock = hasPending ? "This agent already has a pending withdrawal"
+    : balance < MIN_WITHDRAWAL ? `Balance is below the KES ${MIN_WITHDRAWAL} minimum` : "";
   return (
     <div className={`emp-card${hasPending ? " has-pending" : ""}`}>
       <div className={`emp-card-shine ${hasPending ? "emp-card-shine-pending" : "emp-card-shine-normal"}`} />
@@ -589,7 +775,8 @@ function EmployeeCard({ emp, wallet, walletLoading, pendingWd, onApprove }) {
           </div>
           <div className="emp-chips">
             <span className="chip-xs chip-purple"><Shield size={11} />{emp.role}</span>
-            <span className="chip-xs chip-blue"><Activity size={11} />ref {emp.refCode}</span>
+            <span className="chip-xs chip-blue"><Activity size={11} />ref {emp.refCode ?? "…"}</span>
+            <span className="chip-xs chip-purple"><Percent size={11} />{ratePct(emp)}% commission</span>
             {emp.isActive
               ? <span className="chip-xs chip-green"><CheckCircle2 size={11} />Active</span>
               : <span className="chip-xs chip-muted"><XCircle size={11} />Inactive</span>}
@@ -625,13 +812,27 @@ function EmployeeCard({ emp, wallet, walletLoading, pendingWd, onApprove }) {
               Requested <em>{fmt(pendingWd.requestedAt)}</em>
               {pendingWd.refCode && <> · to <em>{pendingWd.refCode}</em></>}
               {" · "}Bal. at request: <em>{kes(pendingWd.availableBalance)}</em>
+              {pendingWd.initiatedBy && <> · <em>created by admin</em></>}
             </div>
           </div>
-          <button className="btn-approve" onClick={() => onApprove(pendingWd, emp.name)}>
-            <CheckCircle2 size={14} />Approve
-          </button>
+          <div className="pending-wd-btns">
+            <button className="btn-reject" onClick={() => onCancelWd(pendingWd, emp.name)}>
+              <Ban size={14} />Cancel
+            </button>
+            <button className="btn-approve" onClick={() => onApprove(pendingWd, emp.name)}>
+              <CheckCircle2 size={14} />Approve
+            </button>
+          </div>
         </div>
       )}
+      <div className="emp-actions">
+        <button className="emp-action-btn" onClick={() => onEditRate(emp)}>
+          <Percent size={14} />Commission rate
+        </button>
+        <button className="emp-action-btn" onClick={() => onWithdraw(emp)} disabled={!!withdrawBlock || walletLoading} title={withdrawBlock || "Create a withdrawal for this agent"}>
+          <ArrowUpRight size={14} />Withdraw for agent
+        </button>
+      </div>
     </div>
   );
 }
@@ -649,6 +850,10 @@ function AdminView({ user, adminEmp, onLogout }) {
   const [confirmReq,     setConfirmReq]     = useState(null);
   const [approving,      setApproving]      = useState(false);
   const [toast,          setToast]          = useState(null);
+  const [modal,          setModal]          = useState(null); // { type: "create"|"rate"|"withdraw"|"cancel", ... }
+
+  const closeModal = () => setModal(null);
+  const modalDone  = (msg) => { setModal(null); showToast(msg, "ok"); };
 
   const showToast = (msg, type = "ok") => { setToast({ msg, type }); setTimeout(() => setToast(null), 3500); };
 
@@ -725,6 +930,10 @@ function AdminView({ user, adminEmp, onLogout }) {
           onConfirm={handleApprove} onCancel={() => !approving && setConfirmReq(null)} loading={approving}
         />
       )}
+      {modal?.type === "create"   && <CreateEmployeeModal onClose={closeModal} onDone={msg => showToast(msg, "ok")} />}
+      {modal?.type === "rate"     && <RateModal emp={modal.emp} onClose={closeModal} onDone={modalDone} />}
+      {modal?.type === "withdraw" && <AdminWithdrawModal emp={modal.emp} wallet={wallets[modal.emp.uid]} onClose={closeModal} onDone={modalDone} />}
+      {modal?.type === "cancel"   && <CancelWithdrawalModal request={modal.request} empName={modal.empName} onClose={closeModal} onDone={modalDone} />}
       {toast && (
         <div className={`toast toast-${toast.type}`}>
           {toast.type === "ok" ? <CheckCircle2 size={14} /> : <AlertTriangle size={14} />}
@@ -740,7 +949,7 @@ function AdminView({ user, adminEmp, onLogout }) {
             <div>
               <div className="hero-eyebrow">Welcome back{adminEmp?.name ? `, ${adminEmp.name}` : ""}</div>
               <h1 className="admin-hero-title">Admin <em>Console</em></h1>
-              <p className="admin-hero-sub">Manage agents · review wallets · approve withdrawals</p>
+              <p className="admin-hero-sub">Add agents · set commission · manage withdrawals</p>
             </div>
             <div className="hero-date-box">
               <div className="hero-date-lbl">Today</div>
@@ -793,6 +1002,9 @@ function AdminView({ user, adminEmp, onLogout }) {
                 </span>
               )}
             </button>
+            <button className="btn-new-emp" onClick={() => setModal({ type: "create" })}>
+              <UserPlus size={14} />New employee
+            </button>
           </div>
           {filtered.length === 0 ? (
             <div className="card">
@@ -811,6 +1023,9 @@ function AdminView({ user, adminEmp, onLogout }) {
                   walletLoading={walletsLoading && !wallets[emp.uid]}
                   pendingWd={pendingWds[emp.uid] ?? null}
                   onApprove={(req, name) => setConfirmReq({ request: req, empName: name })}
+                  onCancelWd={(req, name) => setModal({ type: "cancel", request: req, empName: name })}
+                  onEditRate={e => setModal({ type: "rate", emp: e })}
+                  onWithdraw={e => setModal({ type: "withdraw", emp: e })}
                 />
               ))}
             </div>
