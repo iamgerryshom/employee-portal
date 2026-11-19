@@ -879,7 +879,6 @@ function AdminView({ user, adminEmp, onLogout }) {
   const [filterActive,   setFilterActive]   = useState("all");
   const [filterPending,  setFilterPending]  = useState(false);
   const [confirmReq,     setConfirmReq]     = useState(null);
-  const [approving,      setApproving]      = useState(false);
   const [toast,          setToast]          = useState(null);
   const [modal,          setModal]          = useState(null); // { type: "create"|"edit"|"withdraw"|"cancel", ... }
 
@@ -904,7 +903,13 @@ function AdminView({ user, adminEmp, onLogout }) {
     setModal(null); showToast(msg, "ok");
   };
 
-  const showToast = (msg, type = "ok") => { setToast({ msg, type }); setTimeout(() => setToast(null), 3500); };
+  // One timer, so an earlier toast's timeout can't hide a newer toast early.
+  const toastTimer = useRef(null);
+  const showToast = (msg, type = "ok") => {
+    setToast({ msg, type });
+    clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(() => setToast(null), type === "err" ? 6000 : 3500);
+  };
 
   // All employees
   useEffect(() => {
@@ -945,18 +950,27 @@ function AdminView({ user, adminEmp, onLogout }) {
     return unsub;
   }, []);
 
+  // Puts a request back on its card if a background approval fails.
+  const unmarkResolved = (req) => {
+    resolvedIds.current.delete(req.id);
+    setPendingWds(prev => prev[req.employeeId] ? prev : { ...prev, [req.employeeId]: req });
+  };
+
+  // Approves in the background so the admin can move straight on to the next
+  // agent: the alert is hidden at once and restored if the server rejects it.
   const handleApprove = async () => {
     if (!confirmReq) return;
-    setApproving(true);
+    const { request, empName } = confirmReq;
+    setConfirmReq(null);
+    markResolved(request);
     try {
       // Server checks admin role, deducts the wallet and records the withdrawal atomically.
-      await callFn("approveWithdrawal", { requestId: confirmReq.request.id });
-      markResolved(confirmReq.request);
-      showToast(`Withdrawal approved for ${confirmReq.empName}`, "ok");
-      setConfirmReq(null);
+      await callFn("approveWithdrawal", { requestId: request.id });
+      showToast(`Withdrawal approved for ${empName}`, "ok");
     } catch (e) {
-      showToast("Approval failed: " + e.message, "err");
-    } finally { setApproving(false); }
+      unmarkResolved(request);
+      showToast(`Approval failed for ${empName}: ${e.message}`, "err");
+    }
   };
 
   const filtered = employees.filter(emp => {
@@ -978,7 +992,7 @@ function AdminView({ user, adminEmp, onLogout }) {
         <ConfirmApproveModal
           request={confirmReq.request} empName={confirmReq.empName}
           empPhone={employees.find(e => e.uid === confirmReq.request.employeeId)?.phoneNumber}
-          onConfirm={handleApprove} onCancel={() => !approving && setConfirmReq(null)} loading={approving}
+          onConfirm={handleApprove} onCancel={() => setConfirmReq(null)} loading={false}
         />
       )}
       {modal?.type === "create"   && <CreateEmployeeModal onClose={closeModal} onDone={msg => showToast(msg, "ok")} />}
