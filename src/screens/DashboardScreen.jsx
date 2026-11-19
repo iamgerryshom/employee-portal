@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   onAuthStateChanged, signOut, updatePassword,
@@ -883,8 +883,26 @@ function AdminView({ user, adminEmp, onLogout }) {
   const [toast,          setToast]          = useState(null);
   const [modal,          setModal]          = useState(null); // { type: "create"|"edit"|"withdraw"|"cancel", ... }
 
+  // Requests this admin has approved/cancelled. The server has already committed
+  // them, so hide them right away instead of waiting for the live listener
+  // (which can be slow or stall), and ignore them if a stale snapshot still lists them.
+  const resolvedIds = useRef(new Set());
+  const markResolved = (req) => {
+    if (!req?.id) return;
+    resolvedIds.current.add(req.id);
+    setPendingWds(prev => {
+      if (prev[req.employeeId]?.id !== req.id) return prev;
+      const next = { ...prev };
+      delete next[req.employeeId];
+      return next;
+    });
+  };
+
   const closeModal = () => setModal(null);
-  const modalDone  = (msg) => { setModal(null); showToast(msg, "ok"); };
+  const modalDone  = (msg) => {
+    if (modal?.type === "cancel") markResolved(modal.request);
+    setModal(null); showToast(msg, "ok");
+  };
 
   const showToast = (msg, type = "ok") => { setToast({ msg, type }); setTimeout(() => setToast(null), 3500); };
 
@@ -916,13 +934,14 @@ function AdminView({ user, adminEmp, onLogout }) {
     const unsub = onSnapshot(q, snap => {
       const map = {};
       snap.docs.forEach(d => {
+        if (resolvedIds.current.has(d.id)) return;
         const data = { id: d.id, ...d.data() };
         if (!map[data.employeeId] || (data.requestedAt?.toDate?.() ?? 0) > (map[data.employeeId].requestedAt?.toDate?.() ?? 0)) {
           map[data.employeeId] = data;
         }
       });
       setPendingWds(map);
-    }, () => setPendingWds({}));
+    }, err => console.error("Pending withdrawals listener failed:", err));
     return unsub;
   }, []);
 
@@ -932,6 +951,7 @@ function AdminView({ user, adminEmp, onLogout }) {
     try {
       // Server checks admin role, deducts the wallet and records the withdrawal atomically.
       await callFn("approveWithdrawal", { requestId: confirmReq.request.id });
+      markResolved(confirmReq.request);
       showToast(`Withdrawal approved for ${confirmReq.empName}`, "ok");
       setConfirmReq(null);
     } catch (e) {
